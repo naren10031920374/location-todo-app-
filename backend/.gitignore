@@ -1,0 +1,7 @@
+venv/              # Ignore virtual environment folder
+.env               # Ignore environment variables file
+__pycache__/       # Ignore Python cache
+*.pyc              # Ignore compiled Python files
+.DS_Store          # Ignore macOS system files
+*.egg-info/        # Ignore package info
+.pytest_cache/     # Ignore pytest cache

@@ -28,8 +28,18 @@ from services import create_todos_from_parsed_text
 from nlp_service import parse_todo_text
 from typing import List
 from auth import get_current_user_basic
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, specify the exact origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/")
 def read_root():

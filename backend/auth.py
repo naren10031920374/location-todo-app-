@@ -109,3 +109,43 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token"
         )
+
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
+
+# Basic auth security
+basic_security = HTTPBasic()
+
+async def get_current_user_basic(credentials: HTTPBasicCredentials = Depends(basic_security)):
+    """
+    FastAPI dependency for basic authentication (email + password)
+    
+    Usage: Add 'current_user = Depends(get_current_user_basic)' to your endpoint
+    
+    Args:
+        credentials: Email (username) and password from HTTP Basic Auth
+    
+    Returns:
+        Payload dictionary with user_id
+    
+    Raises:
+        HTTPException: If credentials are invalid
+    """
+    from database import SessionLocal
+    from services import authenticate_user
+    
+    db = SessionLocal()
+    try:
+        # Email is the username in Basic Auth
+        user = authenticate_user(db, credentials.username, credentials.password)
+        
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password",
+                headers={"WWW-Authenticate": "Basic"},
+            )
+        
+        return {"user_id": user.id}
+    
+    finally:
+        db.close()

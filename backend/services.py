@@ -360,3 +360,60 @@ def get_nearby_todos(db: Session, user_id: int, user_latitude: float, user_longi
                 })
     
     return nearby
+
+def create_todos_from_parsed_text(db: Session, user_id: int, parsed_data: dict):
+    """
+    Create multiple todos from parsed natural language text
+    
+    Args:
+        db: Database session
+        user_id: ID of user creating todos
+        parsed_data: Dictionary from NLP parsing with items, store, date, category
+    
+    Returns:
+        List of created TodoItem objects
+    """
+    from datetime import datetime, timedelta
+    
+    items = parsed_data.get("items", [])
+    store_name = parsed_data.get("store")
+    date_str = parsed_data.get("date")
+    category = parsed_data.get("category")
+    
+    created_todos = []
+    
+    # Create a store if store name is provided
+    store = None
+    if store_name:
+        store = get_or_create_store(db, store_name)
+    
+    # Parse date if provided (simple parsing for "tomorrow", "today", "next week")
+    due_date = None
+    if date_str:
+        date_lower = date_str.lower()
+        today = datetime.utcnow().date()
+        
+        if "tomorrow" in date_lower:
+            due_date = datetime.combine(today + timedelta(days=1), datetime.min.time())
+        elif "today" in date_lower:
+            due_date = datetime.combine(today, datetime.min.time())
+        elif "next week" in date_lower or "week" in date_lower:
+            due_date = datetime.combine(today + timedelta(days=7), datetime.min.time())
+    
+    # Create a todo for each item
+    for item in items:
+        todo = TodoItemCreate(
+            title=item,
+            category=category,
+            due_date=due_date
+        )
+        
+        db_todo = create_todo(db, user_id, todo)
+        
+        # Link to store if store exists
+        if store:
+            link_todo_to_store(db, db_todo.id, store.id)
+        
+        created_todos.append(db_todo)
+    
+    return created_todos

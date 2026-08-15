@@ -23,6 +23,11 @@ from services import (
 from schemas import StoreCreate, StoreResponse
 from geocoding import calculate_distance
 from services import get_nearby_todos
+from nlp_service import parse_todo_text, classify_todo_category, suggest_stores_for_item
+from services import create_todos_from_parsed_text
+from nlp_service import parse_todo_text
+from typing import List
+from auth import get_current_user_basic
 
 app = FastAPI()
 
@@ -95,7 +100,7 @@ def login(user: UserCreate, db: Session = Depends(get_db)):
 from auth import get_current_user
 
 @app.get("/users/me")
-def get_current_user_info(current_user: dict = Depends(get_current_user)):
+def get_current_user_info(current_user: dict = Depends(get_current_user_basic)):
     """
     Protected endpoint - requires valid JWT token
     
@@ -119,7 +124,7 @@ def get_current_user_info(current_user: dict = Depends(get_current_user)):
 # ===== TODO ENDPOINTS =====
 
 @app.post("/todos", response_model=TodoItemResponse)
-def create_new_todo(todo: TodoItemCreate, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+def create_new_todo(todo: TodoItemCreate, current_user: dict = Depends(get_current_user_basic), db: Session = Depends(get_db)):
     """
     Create a new todo
     
@@ -138,7 +143,7 @@ def create_new_todo(todo: TodoItemCreate, current_user: dict = Depends(get_curre
     return db_todo
 
 @app.get("/todos", response_model=list[TodoItemResponse])
-def list_user_todos(current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+def list_user_todos(current_user: dict = Depends(get_current_user_basic), db: Session = Depends(get_db)):
     """
     Get all todos for the current user
     
@@ -152,7 +157,7 @@ def list_user_todos(current_user: dict = Depends(get_current_user), db: Session 
     return todos
 
 @app.get("/todos/{todo_id}", response_model=TodoItemResponse)
-def get_single_todo(todo_id: int, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+def get_single_todo(todo_id: int, current_user: dict = Depends(get_current_user_basic), db: Session = Depends(get_db)):
     """
     Get a single todo by ID
     
@@ -181,7 +186,7 @@ def get_single_todo(todo_id: int, current_user: dict = Depends(get_current_user)
     return db_todo
 
 @app.put("/todos/{todo_id}", response_model=TodoItemResponse)
-def update_existing_todo(todo_id: int, todo_update: TodoItemUpdate, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+def update_existing_todo(todo_id: int, todo_update: TodoItemUpdate, current_user: dict = Depends(get_current_user_basic), db: Session = Depends(get_db)):
     """
     Update a todo
     
@@ -211,7 +216,7 @@ def update_existing_todo(todo_id: int, todo_update: TodoItemUpdate, current_user
     return db_todo
 
 @app.delete("/todos/{todo_id}")
-def delete_existing_todo(todo_id: int, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+def delete_existing_todo(todo_id: int, current_user: dict = Depends(get_current_user_basic), db: Session = Depends(get_db)):
     """
     Delete a todo
     
@@ -240,7 +245,7 @@ def delete_existing_todo(todo_id: int, current_user: dict = Depends(get_current_
     return {"message": "Todo deleted successfully"}
 
 @app.post("/todos/{todo_id}/stores/{store_id}")
-def link_todo_to_store_endpoint(todo_id: int, store_id: int, distance_threshold_km: float = 1.0, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+def link_todo_to_store_endpoint(todo_id: int, store_id: int, distance_threshold_km: float = 1.0, current_user: dict = Depends(get_current_user_basic), db: Session = Depends(get_db)):
     """
     Link a todo to a store (for location-based reminders)
     
@@ -269,7 +274,7 @@ def link_todo_to_store_endpoint(todo_id: int, store_id: int, distance_threshold_
     return {"message": f"Todo {todo_id} linked to store {store_id}"}
 
 @app.delete("/todos/{todo_id}/stores/{store_id}")
-def unlink_todo_from_store_endpoint(todo_id: int, store_id: int, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+def unlink_todo_from_store_endpoint(todo_id: int, store_id: int, current_user: dict = Depends(get_current_user_basic), db: Session = Depends(get_db)):
     """
     Remove link between a todo and a store
     
@@ -368,7 +373,7 @@ class LocationUpdate(BaseModel):
     longitude: float
 
 @app.post("/locations/nearby")
-def check_nearby_todos(location: LocationUpdate, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+def check_nearby_todos(location: LocationUpdate, current_user: dict = Depends(get_current_user_basic), db: Session = Depends(get_db)):
     """
     Check if user is near any of their todos
     
@@ -398,4 +403,161 @@ def check_nearby_todos(location: LocationUpdate, current_user: dict = Depends(ge
         },
         "nearby_todos": nearby_todos,
         "count": len(nearby_todos)
+    }
+
+# ===== NLP / AI ENDPOINTS =====
+
+class ParseTodoRequest(BaseModel):
+    """Request to parse natural language todo"""
+    text: str
+
+@app.post("/ai/parse-todo")
+def parse_todo_with_ai(request: ParseTodoRequest, current_user: dict = Depends(get_current_user_basic), db: Session = Depends(get_db)):
+    """
+    Parse natural language todo text using AI
+    
+    Example input:
+    {
+        "text": "I need milk, eggs, and bread from Walmart tomorrow"
+    }
+    
+    Example output:
+    {
+        "items": ["milk", "eggs", "bread"],
+        "store": "Walmart",
+        "date": "tomorrow",
+        "category": "groceries"
+    }
+    
+    Args:
+        request: ParseTodoRequest with todo text
+        current_user: Current authenticated user
+        db: Database session
+    
+    Returns:
+        Parsed todo information
+    """
+    parsed = parse_todo_text(request.text)
+    return parsed
+
+class SuggestStoresRequest(BaseModel):
+    """Request to suggest stores for an item"""
+    item: str
+
+@app.post("/ai/suggest-stores")
+def suggest_stores_for_item_endpoint(request: SuggestStoresRequest, current_user: dict = Depends(get_current_user_basic), db: Session = Depends(get_db)):
+    """
+    Get store suggestions for an item using AI
+    
+    Example input:
+    {
+        "item": "milk"
+    }
+    
+    Example output:
+    {
+        "item": "milk",
+        "suggested_stores": ["Walmart", "Kroger", "Target"]
+    }
+    
+    Args:
+        request: SuggestStoresRequest with item name
+        current_user: Current authenticated user
+        db: Database session
+    
+    Returns:
+        List of suggested stores
+    """
+    stores = suggest_stores_for_item(request.item)
+    
+    return {
+        "item": request.item,
+        "suggested_stores": stores
+    }
+
+class ClassifyTodoRequest(BaseModel):
+    """Request to classify a todo"""
+    text: str
+
+@app.post("/ai/classify-todo")
+def classify_todo_endpoint(request: ClassifyTodoRequest, current_user: dict = Depends(get_current_user_basic), db: Session = Depends(get_db)):
+    """
+    Classify a todo into a category using AI
+    
+    Example input:
+    {
+        "text": "I need to pick up my prescription"
+    }
+    
+    Example output:
+    {
+        "text": "I need to pick up my prescription",
+        "category": "pharmacy"
+    }
+    
+    Args:
+        request: ClassifyTodoRequest with todo text
+        current_user: Current authenticated user
+        db: Database session
+    
+    Returns:
+        Todo text with suggested category
+    """
+    category = classify_todo_category(request.text)
+    
+    return {
+        "text": request.text,
+        "category": category
+    }
+
+class CreateTodosFromTextRequest(BaseModel):
+    """Request to create todos from natural language text"""
+    text: str
+
+
+@app.post("/todos/create-from-text")
+def create_todos_from_natural_language(request: CreateTodosFromTextRequest, current_user: dict = Depends(get_current_user_basic), db: Session = Depends(get_db)):
+    """
+    Create todos from natural language text using AI parsing
+    """
+    user_id = current_user["user_id"]
+    
+    # Parse the text using AI
+    parsed_data = parse_todo_text(request.text)
+    
+    # Check for errors in parsing
+    if "error" in parsed_data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to parse text: {parsed_data['error']}"
+        )
+    
+    # Create todos from parsed data
+    try:
+        created_todos = create_todos_from_parsed_text(db, user_id, parsed_data)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to create todos: {str(e)}"
+        )
+    
+    # Convert SQLAlchemy objects to dicts for response
+    todos_response = [
+        {
+            "id": todo.id,
+            "title": todo.title,
+            "description": todo.description,
+            "category": todo.category,
+            "due_date": todo.due_date,
+            "completed": todo.completed,
+            "created_at": todo.created_at,
+            "user_id": todo.user_id
+        }
+        for todo in created_todos
+    ]
+    
+    return {
+        "created_count": len(created_todos),
+        "todos": todos_response,
+        "parsed_data": parsed_data
     }

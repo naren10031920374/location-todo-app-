@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
+import TodosPage from './pages/TodosPage';
 import { authService } from './services/auth';
 import './App.css';
 
@@ -31,22 +32,6 @@ function App() {
         <Route path="/" element={<Navigate to={isLoggedIn ? "/todos" : "/login"} />} />
       </Routes>
     </BrowserRouter>
-  );
-}
-
-// Simple todos page placeholder
-function TodosPage() {
-  const handleLogout = () => {
-    authService.logout();
-    window.location.href = '/login';
-  };
-
-  return (
-    <div className="todos-container">
-      <h1>📝 My Todos</h1>
-      <button onClick={handleLogout}>Logout</button>
-      <p>Coming soon: Todo management interface</p>
-    </div>
   );
 }
 

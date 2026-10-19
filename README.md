@@ -25,7 +25,7 @@ frontend/   React 19 + Vite web client
 | API | Python 3.12, FastAPI, Pydantic, SQLAlchemy |
 | Database | PostgreSQL |
 | Auth | JWT (python-jose), passlib/bcrypt |
-| AI | LLM text generation (local model in development; hosted provider for deployment) |
+| AI | Groq (OpenAI-compatible chat completions API) |
 | Frontend | React, Vite, React Router, Axios, Zustand |
 
 ## Getting started
@@ -35,7 +35,7 @@ frontend/   React 19 + Vite web client
 - Python 3.12
 - Node.js
 - PostgreSQL with an empty database (for example `todo_db`)
-- A local LLM server for the AI features (optional; everything else works without it). The current code expects [Ollama](https://ollama.com) with `ollama pull mistral`, and is being moved to a hosted provider.
+- A free [Groq API key](https://console.groq.com/keys) for the AI features (optional; everything else works without it)
 
 ### Backend
 
@@ -78,6 +78,9 @@ The app runs at http://localhost:5173 and expects the API at http://localhost:80
 |---|---|
 | `DATABASE_URL` | PostgreSQL connection string. URL-encode special characters in the password (`@` becomes `%40`). |
 | `SECRET_KEY` | Secret used to sign JWTs. Generate a long random value and never commit it. |
+| `LLM_API_KEY` | API key for the LLM provider (Groq by default). `GROQ_API_KEY` also works. |
+| `LLM_BASE_URL` | Optional. Any OpenAI-compatible API. Defaults to `https://api.groq.com/openai/v1`. |
+| `LLM_MODEL` | Optional. Defaults to `openai/gpt-oss-20b`. |
 | `ENVIRONMENT` | `development` or `production` |
 | `DEBUG` | `True` or `False` |
 

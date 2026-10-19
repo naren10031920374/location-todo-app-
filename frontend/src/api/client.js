@@ -1,7 +1,8 @@
 import axios from 'axios';
 
-// Base URL for your FastAPI backend
-const API_BASE_URL = 'http://localhost:8000';
+// Base URL for the FastAPI backend. Set VITE_API_URL at build time (for example in
+// Netlify's environment variables); falls back to the local dev server.
+const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/+$/, '');
 
 // Create axios instance
 const apiClient = axios.create({

@@ -72,15 +72,6 @@ npm run dev
 
 The app runs at http://localhost:5173 and expects the API at http://localhost:8000.
 
-### Install on your phone
-
-The frontend is a Progressive Web App, so the deployed site can be installed like a native app:
-
-- **Android (Chrome):** open the site, tap the menu, then **Install app** (or **Add to Home screen**).
-- **iPhone (Safari):** open the site, tap **Share**, then **Add to Home Screen**.
-
-It opens full screen with its own icon, and the app shell loads even when offline (todos still need a connection).
-
 ## Backend environment variables
 
 | Variable | Purpose |

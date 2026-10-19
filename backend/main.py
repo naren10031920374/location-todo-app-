@@ -29,13 +29,23 @@ from nlp_service import parse_todo_text
 from typing import List
 from auth import get_current_user_basic
 from fastapi.middleware.cors import CORSMiddleware
+import os
 
 app = FastAPI()
+
+# Allowed browser origins, comma-separated, from the ALLOWED_ORIGINS environment variable.
+# In production set it to your frontend URL(s), e.g. https://your-site.netlify.app
+DEFAULT_ORIGINS = "http://localhost:5173,http://localhost:3000"
+allowed_origins = [
+    origin.strip().rstrip("/")
+    for origin in os.getenv("ALLOWED_ORIGINS", DEFAULT_ORIGINS).split(",")
+    if origin.strip()
+]
 
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify the exact origins
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

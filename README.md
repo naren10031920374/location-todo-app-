@@ -72,12 +72,22 @@ npm run dev
 
 The app runs at http://localhost:5173 and expects the API at http://localhost:8000.
 
+### Install on your phone
+
+The frontend is a Progressive Web App, so the deployed site can be installed like a native app:
+
+- **Android (Chrome):** open the site, tap the menu, then **Install app** (or **Add to Home screen**).
+- **iPhone (Safari):** open the site, tap **Share**, then **Add to Home Screen**.
+
+It opens full screen with its own icon, and the app shell loads even when offline (todos still need a connection).
+
 ## Backend environment variables
 
 | Variable | Purpose |
 |---|---|
 | `DATABASE_URL` | PostgreSQL connection string. URL-encode special characters in the password (`@` becomes `%40`). |
 | `SECRET_KEY` | Secret used to sign JWTs. Generate a long random value and never commit it. |
+| `ALLOWED_ORIGINS` | Optional. Comma-separated browser origins allowed by CORS. Defaults to the local dev URLs; set it to your frontend URL in production. |
 | `LLM_API_KEY` | API key for the LLM provider (Groq by default). `GROQ_API_KEY` also works. |
 | `LLM_BASE_URL` | Optional. Any OpenAI-compatible API. Defaults to `https://api.groq.com/openai/v1`. |
 | `LLM_MODEL` | Optional. Defaults to `openai/gpt-oss-20b`. |

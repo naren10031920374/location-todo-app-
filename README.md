@@ -8,7 +8,7 @@ A full-stack todo app that reminds you about tasks when you are near the right s
 - Todo CRUD with categories and due dates
 - Stores with address geocoding, linked to todos
 - Location-based reminders using Haversine distance
-- AI parsing, category classification and store suggestions via Ollama (Mistral)
+- AI parsing, category classification and store suggestions powered by an LLM
 - React web client with todo management and location tracking
 
 ## Repository layout
@@ -25,7 +25,7 @@ frontend/   React 19 + Vite web client
 | API | Python 3.12, FastAPI, Pydantic, SQLAlchemy |
 | Database | PostgreSQL |
 | Auth | JWT (python-jose), passlib/bcrypt |
-| AI | Ollama running Mistral on port 11434 |
+| AI | LLM text generation (local model in development; hosted provider for deployment) |
 | Frontend | React, Vite, React Router, Axios, Zustand |
 
 ## Getting started
@@ -35,7 +35,7 @@ frontend/   React 19 + Vite web client
 - Python 3.12
 - Node.js
 - PostgreSQL with an empty database (for example `todo_db`)
-- [Ollama](https://ollama.com) with the model pulled: `ollama pull mistral` (only needed for the AI features)
+- A local LLM server for the AI features (optional; everything else works without it). The current code expects [Ollama](https://ollama.com) with `ollama pull mistral`, and is being moved to a hosted provider.
 
 ### Backend
 

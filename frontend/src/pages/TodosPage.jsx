@@ -88,6 +88,21 @@ export default function TodosPage() {
     setTimeout(() => setShowNotification(false), 5000);
   };
 
+  // Where is the user right now? Used to find the nearest branch of the store they typed.
+  // Reuses live tracking if it is on; otherwise asks the browser once (cached for 5 minutes).
+  // Resolves to null if location is unavailable or denied, and adding a todo carries on without it.
+  const getCurrentLocation = () => {
+    if (userLocation) return Promise.resolve(userLocation);
+    if (!('geolocation' in navigator)) return Promise.resolve(null);
+    return new Promise((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
+        () => resolve(null),
+        { timeout: 5000, maximumAge: 300000 }
+      );
+    });
+  };
+
   // Add todo(s): the AI splits the text into items and picks the category, store and date.
   // If the AI is unavailable or finds no items (e.g. "call mom"), the text is saved as one
   // normal todo, so adding something never depends on the AI being up.
@@ -105,11 +120,19 @@ export default function TodosPage() {
       let created = 0;
       let category = null;
       let aiWorked = true;
+      let store = null;
+      let sentLocation = false;
 
       try {
-        const response = await apiClient.post('/todos/create-from-text', { text: input });
+        const where = await getCurrentLocation();
+        sentLocation = !!where;
+        const response = await apiClient.post('/todos/create-from-text', {
+          text: input,
+          ...(where ? { latitude: where.latitude, longitude: where.longitude } : {}),
+        });
         created = response.data.created_count || 0;
         category = response.data.todos?.[0]?.category || null;
+        store = response.data.store || null;
       } catch (aiErr) {
         aiWorked = false; // AI unavailable or couldn't parse it: fall back below
         console.warn('AI parsing failed, saving as a plain todo:', aiErr);
@@ -132,9 +155,15 @@ export default function TodosPage() {
 
       setText('');
       setShowCreateForm(false);
-      showNotificationMessage(
-        `✨ Added ${created} todo${created > 1 ? 's' : ''}${category ? ` · ${category}` : ''}`
-      );
+      let message = `✨ Added ${created} todo${created > 1 ? 's' : ''}${category ? ` · ${category}` : ''}`;
+      if (store?.located) {
+        message += ` · 📍 ${store.name} ${store.distance_km != null ? `${store.distance_km} km away` : 'found nearby'}`;
+      } else if (store) {
+        message += sentLocation
+          ? ` · ${store.name} (couldn't find a nearby branch, so no reminder)`
+          : ` · ${store.name} (allow location access to get a reminder)`;
+      }
+      showNotificationMessage(message);
       fetchTodos();
     } catch (err) {
       setError('Failed to add todo');

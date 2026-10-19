@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from fastapi import FastAPI, HTTPException, status, Depends
 from sqlalchemy.orm import Session
 from schemas import UserCreate, UserResponse
@@ -24,9 +24,9 @@ from schemas import StoreCreate, StoreResponse
 from geocoding import calculate_distance
 from services import get_nearby_todos
 from nlp_service import parse_todo_text, classify_todo_category, suggest_stores_for_item
-from services import create_todos_from_parsed_text
+from services import create_todos_from_parsed_text, get_or_create_store_near, get_or_create_unlocated_store
 from nlp_service import parse_todo_text
-from typing import List
+from typing import List, Optional
 from auth import get_current_user_basic
 from fastapi.middleware.cors import CORSMiddleware
 import os
@@ -533,6 +533,10 @@ def classify_todo_endpoint(request: ClassifyTodoRequest, current_user: dict = De
 class CreateTodosFromTextRequest(BaseModel):
     """Request to create todos from natural language text"""
     text: str
+    # Optional: where the user is right now. When given, the store named in the text is
+    # resolved to its nearest real branch so location reminders can fire.
+    latitude: Optional[float] = Field(default=None, ge=-90, le=90)
+    longitude: Optional[float] = Field(default=None, ge=-180, le=180)
 
 
 @app.post("/todos/create-from-text")
@@ -552,9 +556,27 @@ def create_todos_from_natural_language(request: CreateTodosFromTextRequest, curr
             detail=f"Failed to parse text: {parsed_data['error']}"
         )
     
+    # If we know where the user is, find the nearest branch of the named store
+    store = None
+    store_distance_km = None
+    store_name = parsed_data.get("store")
+    if store_name:
+        try:
+            if request.latitude is not None and request.longitude is not None:
+                store, store_distance_km = get_or_create_store_near(
+                    db, store_name, request.latitude, request.longitude
+                )
+            else:
+                # No location sent: keep the store without coordinates (no reminder for it)
+                store = get_or_create_unlocated_store(db, store_name)
+        except Exception as e:
+            print(f"Store lookup failed, continuing without it: {e}")
+            db.rollback()
+            store = None
+
     # Create todos from parsed data
     try:
-        created_todos = create_todos_from_parsed_text(db, user_id, parsed_data)
+        created_todos = create_todos_from_parsed_text(db, user_id, parsed_data, store=store)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -576,8 +598,25 @@ def create_todos_from_natural_language(request: CreateTodosFromTextRequest, curr
         for todo in created_todos
     ]
     
+    store_response = None
+    if store_name:
+        linked = store
+        if linked is None and created_todos:
+            linked = created_todos[0].stores[0] if created_todos[0].stores else None
+        if linked is not None:
+            store_response = {
+                "id": linked.id,
+                "name": linked.name,
+                "address": linked.address,
+                "latitude": linked.latitude,
+                "longitude": linked.longitude,
+                "located": linked.latitude is not None and linked.longitude is not None,
+                "distance_km": store_distance_km,
+            }
+
     return {
         "created_count": len(created_todos),
         "todos": todos_response,
-        "parsed_data": parsed_data
+        "parsed_data": parsed_data,
+        "store": store_response
     }

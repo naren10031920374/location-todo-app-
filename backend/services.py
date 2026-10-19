@@ -1,3 +1,4 @@
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from models import User
 from schemas import UserCreate
@@ -6,7 +7,7 @@ from models import TodoItem, Store, TodoStore
 from schemas import TodoItemCreate, TodoItemUpdate
 from datetime import datetime
 from models import Store
-from geocoding import calculate_distance
+from geocoding import calculate_distance, find_nearest_store, SEARCH_RADIUS_KM
 
 def get_user_by_email(db: Session, email: str):
     """Get a user from database by email"""
@@ -208,6 +209,63 @@ def get_or_create_store(db: Session, name: str, latitude: float = None, longitud
     
     return db_store
 
+# Get or create a store that has no known location
+def get_or_create_unlocated_store(db: Session, name: str):
+    """
+    Like get_or_create_store, but only reuses a store that has no coordinates.
+    Used when we could not find which branch the user means, so we never silently
+    attach their todo to some other city's branch.
+    """
+    store = db.query(Store).filter(
+        func.lower(Store.name) == name.strip().lower(),
+        Store.latitude.is_(None),
+        Store.longitude.is_(None),
+    ).first()
+    if store:
+        return store
+    return create_store(db, name=name)
+
+# Get or create the branch of a store that is near the user
+def get_or_create_store_near(db: Session, name: str, user_latitude: float, user_longitude: float):
+    """
+    Find the branch of `name` closest to the user and return it as a Store with coordinates.
+
+    Order of attempts:
+      1. A branch of that name we already have saved within SEARCH_RADIUS_KM of the user (no network call).
+      2. The nearest branch found on OpenStreetMap (Nominatim); it is saved for next time.
+      3. Fall back to a plain store without coordinates (the old behaviour), so adding a todo never fails
+         just because the lookup did.
+
+    Returns:
+        (store, distance_km). distance_km is None when no branch location could be found.
+    """
+    saved = db.query(Store).filter(
+        func.lower(Store.name) == name.strip().lower(),
+        Store.latitude.isnot(None),
+        Store.longitude.isnot(None),
+    ).all()
+
+    best, best_distance = None, None
+    for candidate in saved:
+        d = calculate_distance(user_latitude, user_longitude, candidate.latitude, candidate.longitude)
+        if d <= SEARCH_RADIUS_KM and (best is None or d < best_distance):
+            best, best_distance = candidate, d
+    if best:
+        return best, round(best_distance, 2)
+
+    found = find_nearest_store(name, user_latitude, user_longitude)
+    if found:
+        store = create_store(
+            db,
+            name=name,
+            address=found["address"],
+            latitude=found["latitude"],
+            longitude=found["longitude"],
+        )
+        return store, found["distance_km"]
+
+    return get_or_create_unlocated_store(db, name), None
+
 # Get store by ID
 def get_store_by_id(db: Session, store_id: int):
     """Get a store by ID"""
@@ -361,7 +419,7 @@ def get_nearby_todos(db: Session, user_id: int, user_latitude: float, user_longi
     
     return nearby
 
-def create_todos_from_parsed_text(db: Session, user_id: int, parsed_data: dict):
+def create_todos_from_parsed_text(db: Session, user_id: int, parsed_data: dict, store=None):
     """
     Create multiple todos from parsed natural language text
     
@@ -369,6 +427,8 @@ def create_todos_from_parsed_text(db: Session, user_id: int, parsed_data: dict):
         db: Database session
         user_id: ID of user creating todos
         parsed_data: Dictionary from NLP parsing with items, store, date, category
+        store: Optional already-resolved Store (e.g. the branch near the user) to link the todos to.
+               If omitted, a store is looked up or created from the parsed store name.
     
     Returns:
         List of created TodoItem objects
@@ -383,8 +443,7 @@ def create_todos_from_parsed_text(db: Session, user_id: int, parsed_data: dict):
     created_todos = []
     
     # Create a store if store name is provided
-    store = None
-    if store_name:
+    if store is None and store_name:
         store = get_or_create_store(db, store_name)
     
     # Parse date if provided (simple parsing for "tomorrow", "today", "next week")

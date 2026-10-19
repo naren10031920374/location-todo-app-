@@ -1,12 +1,12 @@
 # Location-Based AI Todo App
 
-A full-stack todo app that reminds you about tasks when you are near the right store, and uses a local LLM to turn natural language ("I need milk, eggs and bread from Walmart tomorrow") into categorized todos.
+A full-stack todo app that reminds you about tasks when you are near the right store, and uses a hosted LLM (Groq) to turn natural language ("I need milk, eggs and bread from Walmart tomorrow") into categorized todos.
 
 ## Features
 
 - Register and log in (JWT and HTTP Basic auth)
 - Todo CRUD with categories and due dates
-- Stores with address geocoding, linked to todos
+- Stores linked to todos; the nearest real branch (for example the closest Walmart) is found with OpenStreetMap Nominatim when you add a todo
 - Location-based reminders using Haversine distance
 - AI parsing, category classification and store suggestions powered by an LLM
 - React web client with todo management and location tracking
@@ -72,6 +72,21 @@ npm run dev
 
 The app runs at http://localhost:5173 and expects the API at http://localhost:8000.
 
+### Install on your phone
+
+The frontend is a Progressive Web App, so the deployed site can be installed like a native app:
+
+- **Android (Chrome):** open the site, tap the menu, then **Install app** (or **Add to Home screen**).
+- **iPhone (Safari):** open the site, tap **Share**, then **Add to Home Screen**.
+
+It opens full screen with its own icon, and the app shell loads even when offline (todos still need a connection).
+
+## How location reminders work
+
+When you add a todo like "milk from Walmart", the app asks the browser for your location (once), finds the closest Walmart within 15 km using OpenStreetMap Nominatim, and saves that branch's coordinates. With **Location On**, you get a banner when you are within about 1 km of it. If the browser blocks location or no branch is found, the todo is still saved, just without a reminder.
+
+Nominatim's public service allows about one request per second, so lookups are throttled and cached. Please keep to the [usage policy](https://operations.osmfoundation.org/policies/nominatim/) and set `NOMINATIM_USER_AGENT` to your own app name.
+
 ## Backend environment variables
 
 | Variable | Purpose |
@@ -82,6 +97,8 @@ The app runs at http://localhost:5173 and expects the API at http://localhost:80
 | `LLM_API_KEY` | API key for the LLM provider (Groq by default). `GROQ_API_KEY` also works. |
 | `LLM_BASE_URL` | Optional. Any OpenAI-compatible API. Defaults to `https://api.groq.com/openai/v1`. |
 | `LLM_MODEL` | Optional. Defaults to `openai/gpt-oss-20b`. |
+| `NOMINATIM_URL` | Optional. Store-lookup endpoint. Defaults to the public OpenStreetMap Nominatim service. |
+| `NOMINATIM_USER_AGENT` | Optional. Identifying User-Agent sent to Nominatim (required by the OSM usage policy); set it to your own app name and contact. |
 | `ENVIRONMENT` | `development` or `production` |
 | `DEBUG` | `True` or `False` |
 

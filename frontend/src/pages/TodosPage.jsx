@@ -6,15 +6,11 @@ import '../styles/Todos.css';
 export default function TodosPage() {
   const [todos, setTodos] = useState([]);
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [useAI, setUseAI] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  
-  // Form states
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [category, setCategory] = useState('');
-  const [aiText, setAiText] = useState('');
+
+  // Add-todo form state (one box: AI parses and categorizes whatever you type)
+  const [text, setText] = useState('');
   const [creating, setCreating] = useState(false);
   
   // Location tracking state
@@ -92,59 +88,56 @@ export default function TodosPage() {
     setTimeout(() => setShowNotification(false), 5000);
   };
 
-  // Create todo (regular)
-  const handleCreateTodo = async (e) => {
+  // Add todo(s): the AI splits the text into items and picks the category, store and date.
+  // If the AI is unavailable or finds no items (e.g. "call mom"), the text is saved as one
+  // normal todo, so adding something never depends on the AI being up.
+  const handleAddTodo = async (e) => {
     e.preventDefault();
-    if (!title.trim()) {
-      setError('Title is required');
+    const input = text.trim();
+    if (!input) {
+      setError('Type what you need to do');
       return;
     }
 
     setCreating(true);
+    setError('');
     try {
-      await apiClient.post('/todos', {
-        title: title.trim(),
-        description: description.trim() || null,
-        category: category || null,
-      });
+      let created = 0;
+      let category = null;
+      let aiWorked = true;
 
-      setTitle('');
-      setDescription('');
-      setCategory('');
+      try {
+        const response = await apiClient.post('/todos/create-from-text', { text: input });
+        created = response.data.created_count || 0;
+        category = response.data.todos?.[0]?.category || null;
+      } catch (aiErr) {
+        aiWorked = false; // AI unavailable or couldn't parse it: fall back below
+        console.warn('AI parsing failed, saving as a plain todo:', aiErr);
+      }
+
+      if (created === 0) {
+        let fallbackCategory = null;
+        if (aiWorked) {
+          try {
+            const response = await apiClient.post('/ai/classify-todo', { text: input });
+            fallbackCategory = response.data.category || null;
+          } catch {
+            // no category is fine
+          }
+        }
+        await apiClient.post('/todos', { title: input, category: fallbackCategory });
+        created = 1;
+        category = fallbackCategory;
+      }
+
+      setText('');
       setShowCreateForm(false);
-      setError('');
+      showNotificationMessage(
+        `✨ Added ${created} todo${created > 1 ? 's' : ''}${category ? ` · ${category}` : ''}`
+      );
       fetchTodos();
     } catch (err) {
-      setError('Failed to create todo');
-      console.error(err);
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  // Create todos with AI
-  const handleCreateWithAI = async (e) => {
-    e.preventDefault();
-    if (!aiText.trim()) {
-      setError('Please enter text to parse');
-      return;
-    }
-
-    setCreating(true);
-    try {
-      const response = await apiClient.post('/todos/create-from-text', {
-        text: aiText.trim(),
-      });
-
-      const { created_count, parsed_data } = response.data;
-      setAiText('');
-      setShowCreateForm(false);
-      setError('');
-      
-      showNotificationMessage(`✨ Created ${created_count} todos from AI parsing!`);
-      fetchTodos();
-    } catch (err) {
-      setError('Failed to parse text. Try: "I need milk, eggs, bread from Walmart tomorrow"');
+      setError('Failed to add todo');
       console.error(err);
     } finally {
       setCreating(false);
@@ -247,69 +240,22 @@ export default function TodosPage() {
       {/* Create todo form */}
       {showCreateForm && (
         <div className="create-form-container">
-          <div className="form-tabs">
-            <button
-              className={`tab ${!useAI ? 'active' : ''}`}
-              onClick={() => setUseAI(false)}
-            >
-              Manual
+          <form onSubmit={handleAddTodo} className="create-form">
+            <textarea
+              placeholder="What do you need? e.g. milk, eggs and bread from Walmart tomorrow"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              rows="3"
+              autoFocus
+              required
+            />
+            <small>
+              💡 Type it naturally. Items, store and date are picked out and categorized automatically.
+            </small>
+            <button type="submit" disabled={creating}>
+              {creating ? 'Adding...' : 'Add'}
             </button>
-            <button
-              className={`tab ${useAI ? 'active' : ''}`}
-              onClick={() => setUseAI(true)}
-            >
-              AI Parse
-            </button>
-          </div>
-
-          {!useAI ? (
-            <form onSubmit={handleCreateTodo} className="create-form">
-              <input
-                type="text"
-                placeholder="Todo title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                required
-              />
-              <textarea
-                placeholder="Description (optional)"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows="3"
-              />
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-              >
-                <option value="">Select category (optional)</option>
-                <option value="groceries">Groceries</option>
-                <option value="pharmacy">Pharmacy</option>
-                <option value="hardware">Hardware</option>
-                <option value="clothing">Clothing</option>
-                <option value="entertainment">Entertainment</option>
-                <option value="other">Other</option>
-              </select>
-              <button type="submit" disabled={creating}>
-                {creating ? 'Creating...' : 'Create Todo'}
-              </button>
-            </form>
-          ) : (
-            <form onSubmit={handleCreateWithAI} className="create-form">
-              <textarea
-                placeholder="Example: I need milk, eggs, and bread from Walmart tomorrow"
-                value={aiText}
-                onChange={(e) => setAiText(e.target.value)}
-                rows="3"
-                required
-              />
-              <small>
-                💡 Describe what you need, where, and when. AI will parse it!
-              </small>
-              <button type="submit" disabled={creating}>
-                {creating ? 'Parsing...' : 'Parse with AI'}
-              </button>
-            </form>
-          )}
+          </form>
         </div>
       )}
 
